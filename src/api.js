@@ -55,20 +55,15 @@ async function hfGenerate(modelUrl, prompt) {
   }
 
   const blob = await res.blob();
+  if (blob.size < 500) throw new Error(`Réponse trop petite (${blob.size} bytes)`);
 
-  // Vérifier que le blob est vraiment une image affichable
-  const blobUrl = URL.createObjectURL(blob);
-  await new Promise((resolve, reject) => {
-    const testImg = new Image();
-    testImg.onload = resolve;
-    testImg.onerror = () => {
-      URL.revokeObjectURL(blobUrl);
-      reject(new Error(`Blob invalide (${blob.size} bytes, type: ${blob.type})`));
-    };
-    testImg.src = blobUrl;
+  // Convertir en data URL — auto-contenu, jamais de problème d'affichage
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("FileReader échoué"));
+    reader.readAsDataURL(blob);
   });
-
-  return blobUrl;
 }
 
 export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userRequest }) {
