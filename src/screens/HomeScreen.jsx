@@ -1,6 +1,6 @@
 import s from "./HomeScreen.module.css";
 
-const PREVIEW_STYLES = ["❄️ Scandinave", "✨ Art Déco", "🌿 Bohème", "⬜ Minimaliste"];
+const STEPS = ["📷 Photo", "🏠 Type de pièce", "💬 Décris ta vision", "✨ Génère"];
 
 export default function HomeScreen({ onStart }) {
   return (
@@ -13,12 +13,12 @@ export default function HomeScreen({ onStart }) {
 
         <h1 className={s.title}>Réinvente<br />ton intérieur</h1>
         <p className={s.subtitle}>
-          Prends une photo de ta pièce, choisis un style, et laisse l'IA transformer ton espace
+          Prends une photo de ta pièce, décris ce que tu veux ajouter, et l'IA transforme ton espace
           avec une liste d'achats personnalisée.
         </p>
 
         <div className={s.chips}>
-          {PREVIEW_STYLES.map((s2) => (
+          {STEPS.map((s2) => (
             <span key={s2} className={s.chip}>{s2}</span>
           ))}
         </div>
