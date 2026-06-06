@@ -15,11 +15,11 @@ export default function UploadScreen({ onBack, onResult }) {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const uri = URL.createObjectURL(file);
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const base64 = ev.target.result.split(",")[1];
-      setPhoto({ uri, base64, mimeType: file.type });
+      const dataUrl = ev.target.result;
+      const base64 = dataUrl.split(",")[1];
+      setPhoto({ uri: dataUrl, base64, mimeType: file.type });
     };
     reader.readAsDataURL(file);
   };
@@ -40,8 +40,13 @@ export default function UploadScreen({ onBack, onResult }) {
         userRequest: userRequest.trim(),
       });
 
-      setLoadingStep("🎨 Génération de l'image...");
-      const imageUrl = await generateImage({ stylePrompt: analyzeData.stylePrompt });
+      setLoadingStep("🎨 Modification de ta photo (30–60 sec)...");
+      const imageUrl = await generateImage({
+        imageBase64: photo.base64,
+        imageMediaType: photo.mimeType,
+        userRequest: userRequest.trim(),
+        stylePrompt: analyzeData.stylePrompt,
+      });
 
       onResult({
         originalPhoto: photo.uri,
