@@ -1,7 +1,5 @@
 import Groq from "groq-sdk";
-import { HfInference } from "@huggingface/inference";
 
-// Les clés sont dans les variables d'environnement Vite
 const groq = new Groq({
   apiKey: import.meta.env.VITE_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
@@ -72,21 +70,14 @@ export async function analyzeRoom({ imageBase64, imageMediaType, style, roomType
 }
 
 export async function generateImage({ stylePrompt }) {
-  const fullPrompt = `${stylePrompt}. Interior design professional photography, beautiful lighting, high quality, realistic, no people, no text.`;
+  const fullPrompt = `${stylePrompt}, interior design professional photography, beautiful lighting, high quality, realistic, no people, no text`;
 
-  const blob = await hf.textToImage({
-    model: "black-forest-labs/FLUX.1-schnell",
-    inputs: fullPrompt,
-    parameters: { num_inference_steps: 4, guidance_scale: 0 },
-  });
+  // Pollinations.ai — gratuit, sans clé API, retourne directement une URL image
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=768&height=512&nologo=true&seed=${Date.now()}`;
 
-  if (!blob || blob.size === 0) throw new Error("Image vide retournée");
+  // On vérifie que l'image est accessible
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Impossible de générer l'image");
 
-  // Conversion blob → base64 compatible navigateur
-  const arrayBuffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-  const base64 = btoa(binary);
-  return `data:image/jpeg;base64,${base64}`;
+  return url;
 }
