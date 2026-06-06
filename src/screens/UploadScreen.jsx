@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { ROOM_TYPES } from "../config";
-import { analyzeRoom } from "../api";
+import { analyzeRoom, generateImage } from "../api";
 import s from "./UploadScreen.module.css";
 
 export default function UploadScreen({ onBack, onResult }) {
@@ -18,8 +18,7 @@ export default function UploadScreen({ onBack, onResult }) {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target.result;
-      const base64 = dataUrl.split(",")[1];
-      setPhoto({ uri: dataUrl, base64, mimeType: file.type });
+      setPhoto({ uri: dataUrl, base64: dataUrl.split(",")[1], mimeType: file.type });
     };
     reader.readAsDataURL(file);
   };
@@ -32,19 +31,22 @@ export default function UploadScreen({ onBack, onResult }) {
     setError("");
 
     try {
-      setLoadingStep("🔍 Analyse de ta pièce...");
-      const analyzeData = await analyzeRoom({
+      setLoadingStep("🔍 Analyse de ta pièce…");
+      const { analysis, imagePrompt, items } = await analyzeRoom({
         imageBase64: photo.base64,
         imageMediaType: photo.mimeType || "image/jpeg",
         roomType: selectedRoom,
         userRequest: userRequest.trim(),
       });
 
+      setLoadingStep("🎨 Génération de l'image (30–60 sec)…");
+      const generatedImageUrl = await generateImage({ imagePrompt });
+
       onResult({
         originalPhoto: photo.uri,
-        stylePrompt: analyzeData.stylePrompt,
-        analysis: analyzeData.analysis,
-        items: analyzeData.items || [],
+        generatedImageUrl,
+        analysis,
+        items,
         roomType: selectedRoom,
         userRequest: userRequest.trim(),
       });
@@ -64,7 +66,6 @@ export default function UploadScreen({ onBack, onResult }) {
       </div>
 
       <div className={s.scroll}>
-        {/* Étape 1 : Photo */}
         <SectionTitle n="1" title="Photo de ta pièce" />
         <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
         {photo ? (
@@ -81,7 +82,6 @@ export default function UploadScreen({ onBack, onResult }) {
           </div>
         )}
 
-        {/* Étape 2 : Type de pièce */}
         <SectionTitle n="2" title="Type de pièce" />
         <div className={s.chips}>
           {ROOM_TYPES.map((r) => (
@@ -95,11 +95,10 @@ export default function UploadScreen({ onBack, onResult }) {
           ))}
         </div>
 
-        {/* Étape 3 : Demande */}
         <SectionTitle n="3" title="Qu'est-ce que tu veux ajouter ?" />
         <textarea
           className={s.requestInput}
-          placeholder="Ex : un canapé rouge moderne, des plantes, une lampe dorée au coin..."
+          placeholder="Ex : un canapé rouge moderne, des plantes, une lampe dorée…"
           value={userRequest}
           onChange={(e) => setUserRequest(e.target.value)}
           rows={4}
@@ -112,10 +111,14 @@ export default function UploadScreen({ onBack, onResult }) {
           onClick={handleGenerate}
           disabled={!canSubmit || loading}
         >
-          {loading ? loadingStep : canSubmit ? "✨  Générer la transformation" : "Complète les 3 étapes ci-dessus"}
+          {loading
+            ? <><span className={s.btnSpinner} /> {loadingStep}</>
+            : canSubmit
+            ? "✨  Générer la transformation"
+            : "Complète les 3 étapes ci-dessus"}
         </button>
 
-        {loading && <p className={s.loadingHint}>La génération peut prendre 30 à 60 secondes…</p>}
+        {loading && <p className={s.loadingHint}>L'analyse et la génération peuvent prendre 30 à 90 secondes…</p>}
       </div>
     </div>
   );

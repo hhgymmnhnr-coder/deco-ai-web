@@ -1,21 +1,50 @@
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const HF_TOKEN = import.meta.env.VITE_HF_TOKEN;
+const HF_MODEL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
 
 async function groqFetch(model, messages, options = {}) {
   const res = await fetch(GROQ_API_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${GROQ_KEY}`,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
     body: JSON.stringify({ model, messages, max_tokens: 2000, temperature: 0.3, ...options }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message || `Groq error ${res.status}`);
   }
-  const data = await res.json();
-  return data.choices[0].message.content.trim();
+  return (await res.json()).choices[0].message.content.trim();
+}
+
+async function hfTextToImage(prompt) {
+  const makeReq = () =>
+    fetch(HF_MODEL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${HF_TOKEN}`,
+        "Content-Type": "application/json",
+        "x-use-cache": "false",
+      },
+      body: JSON.stringify({ inputs: prompt }),
+    });
+
+  let res = await makeReq();
+
+  // Modèle en cours de chargement → attendre et réessayer
+  if (res.status === 503) {
+    const json = await res.json().catch(() => ({}));
+    const wait = Math.min((json.estimated_time || 20) * 1000, 30000);
+    await new Promise((r) => setTimeout(r, wait));
+    res = await makeReq();
+  }
+
+  if (!res.ok) throw new Error(`HF error ${res.status}`);
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.startsWith("image/")) throw new Error("HF n'a pas retourné une image");
+
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userRequest }) {
@@ -31,7 +60,7 @@ export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userR
         { type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } },
         {
           type: "text",
-          text: `Describe this ${roomType} in 2 sentences. Then write a Stable Diffusion prompt (50+ words) showing this exact ${roomType} with the following change: "${userRequest}". Keep everything else identical. Format:\nDESCRIPTION: ...\nPROMPT: ...`,
+          text: `Describe this ${roomType} briefly. Then write a Stable Diffusion image prompt (max 200 words) showing this ${roomType} with: "${userRequest}". Be very specific about colors, furniture, lighting. Format:\nDESCRIPTION: ...\nPROMPT: ...`,
         },
       ],
     }]
@@ -40,7 +69,9 @@ export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userR
   const descMatch = visionText.match(/DESCRIPTION:\s*(.+?)(?=PROMPT:|$)/s);
   const promptMatch = visionText.match(/PROMPT:\s*(.+)/s);
   const analysis = descMatch ? descMatch[1].trim() : `${roomType} analysé.`;
-  const stylePrompt = promptMatch ? promptMatch[1].trim() : `${roomType} with ${userRequest}`;
+  const imagePrompt = promptMatch
+    ? promptMatch[1].trim()
+    : `${roomType} with ${userRequest}, interior design, professional photography`;
 
   const jsonText = await groqFetch(
     "llama-3.3-70b-versatile",
@@ -66,12 +97,22 @@ export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userR
     links: SHOP_LINKS(item.searchKeywords || item.name),
   }));
 
-  return { analysis, stylePrompt, items };
+  return { analysis, imagePrompt, items };
 }
 
-export function generateImageUrl({ stylePrompt, seed }) {
-  const prompt = `${stylePrompt}, interior design professional photography, beautiful lighting, high quality, realistic, no people, no text`;
-  // On tronque à 400 chars max pour éviter les URLs trop longues
+export async function generateImage({ imagePrompt }) {
+  const prompt = `${imagePrompt}, interior design professional photography, beautiful lighting, high quality, 8k, realistic, no people, no text`;
+
+  // 1. HuggingFace (token requis, retourne une vraie image)
+  if (HF_TOKEN) {
+    try {
+      return await hfTextToImage(prompt.slice(0, 500));
+    } catch (e) {
+      console.warn("HF échoué, fallback Pollinations:", e.message);
+    }
+  }
+
+  // 2. Pollinations (gratuit, 1 req/IP à la fois)
   const safePrompt = prompt.slice(0, 400);
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=768&height=512&nologo=true&seed=${seed || Date.now()}`;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=768&height=512&nologo=true&seed=${Date.now()}`;
 }

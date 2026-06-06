@@ -1,27 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { CATEGORY_ICONS } from "../config";
-import { generateImageUrl } from "../api";
 import s from "./ResultScreen.module.css";
 
 export default function ResultScreen({ data, onBack, onHome }) {
-  const { originalPhoto, stylePrompt, analysis, items = [], roomType, userRequest } = data;
-
-  const [showOriginal, setShowOriginal] = useState(false);
-  const [imgState, setImgState] = useState("loading"); // "loading" | "ready" | "error"
-  const [seed, setSeed] = useState(() => Date.now());
-  const generatedUrl = generateImageUrl({ stylePrompt, seed });
-
-  // Précharge l'image générée via un objet Image JS (pas de display:none tricks)
-  useEffect(() => {
-    setImgState("loading");
-    const img = new window.Image();
-    img.onload = () => setImgState("ready");
-    img.onerror = () => setImgState("error");
-    img.src = generatedUrl;
-    return () => { img.onload = null; img.onerror = null; };
-  }, [generatedUrl]);
-
-  const handleRetry = () => setSeed(Date.now());
+  const { generatedImageUrl, analysis, items = [], roomType, userRequest } = data;
 
   const totalMin = items.reduce((a, i) => a + (i.budgetMin || 0), 0);
   const totalMax = items.reduce((a, i) => a + (i.budgetMax || 0), 0);
@@ -35,39 +17,13 @@ export default function ResultScreen({ data, onBack, onHome }) {
 
       <div className={s.scroll}>
         <div className={s.styleBadge}>
-          <span>🏠</span>
+          <span>✨</span>
           <span>{roomType} · {userRequest}</span>
         </div>
 
-        <p className={s.sectionLabel}>Transformation</p>
+        <p className={s.sectionLabel}>Résultat généré</p>
         <div className={s.imageCard}>
-          {showOriginal ? (
-            <img src={originalPhoto} className={s.mainImage} alt="avant" />
-          ) : imgState === "loading" ? (
-            <div className={s.imgLoader}>
-              <span className={s.loaderSpinner} />
-              <p>Génération en cours…</p>
-              <p className={s.loaderSub}>peut prendre jusqu'à 60 sec</p>
-            </div>
-          ) : imgState === "error" ? (
-            <div className={s.imgLoader}>
-              <p>⚠️ Génération échouée</p>
-              <button className={s.retryBtn} onClick={handleRetry}>Réessayer</button>
-            </div>
-          ) : (
-            <img src={generatedUrl} className={s.mainImage} alt="après" />
-          )}
-
-          <div className={s.toggleRow}>
-            <button
-              className={`${s.toggleBtn} ${!showOriginal ? s.toggleBtnActive : ""}`}
-              onClick={() => setShowOriginal(false)}
-            >✨ Après</button>
-            <button
-              className={`${s.toggleBtn} ${showOriginal ? s.toggleBtnActive : ""}`}
-              onClick={() => setShowOriginal(true)}
-            >📷 Avant</button>
-          </div>
+          <img src={generatedImageUrl} className={s.mainImage} alt="résultat" />
         </div>
 
         {analysis && (
@@ -97,7 +53,6 @@ export default function ResultScreen({ data, onBack, onHome }) {
 function ItemCard({ item }) {
   const [open, setOpen] = useState(false);
   const icon = CATEGORY_ICONS[item.category] ?? "✦";
-
   const shops = [
     { key: "ikea", label: "IKEA", color: "#0058A3" },
     { key: "amazon", label: "Amazon", color: "#FF9900" },
@@ -118,22 +73,15 @@ function ItemCard({ item }) {
           <p className={s.expand}>{open ? "▲" : "▼"}</p>
         </div>
       </div>
-
       {open && (
         <div className={s.itemExpanded}>
           <p className={s.itemDesc}>{item.description}</p>
           <div className={s.linksRow}>
             {shops.map((shop) =>
               item.links?.[shop.key] ? (
-                <a
-                  key={shop.key}
-                  href={item.links[shop.key]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={s.shopLink}
-                  style={{ borderColor: shop.color + "55", color: shop.color }}
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <a key={shop.key} href={item.links[shop.key]} target="_blank" rel="noopener noreferrer"
+                  className={s.shopLink} style={{ borderColor: shop.color + "55", color: shop.color }}
+                  onClick={(e) => e.stopPropagation()}>
                   {shop.label} →
                 </a>
               ) : null
