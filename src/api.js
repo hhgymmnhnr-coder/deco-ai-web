@@ -81,11 +81,5 @@ export async function analyzeRoom({ imageBase64, imageMediaType, style, roomType
 
 export async function generateImage({ stylePrompt }) {
   const prompt = `${stylePrompt}, interior design professional photography, beautiful lighting, high quality, realistic, no people, no text`;
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=512&nologo=true&seed=${Date.now()}&nofeed=true`;
-
-  // On télécharge vraiment l'image et on attend qu'elle soit prête
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Erreur génération image: ${res.status}`);
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=512&nologo=true&nofeed=true&seed=${Date.now()}`;
 }

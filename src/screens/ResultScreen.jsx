@@ -6,6 +6,7 @@ export default function ResultScreen({ data, onBack, onHome }) {
   const { originalPhoto, generatedImageUrl, analysis, items = [], style, roomType } = data;
   const [showOriginal, setShowOriginal] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const styleInfo = STYLES.find((st) => st.id === style);
 
   const totalMin = items.reduce((a, i) => a + (i.budgetMin || 0), 0);
@@ -29,19 +30,23 @@ export default function ResultScreen({ data, onBack, onHome }) {
         <div className={s.imageCard}>
           {imgError && !showOriginal ? (
             <div className={s.imgErrorBox}>
-              <p>⚠️ Image non disponible</p>
-              <button onClick={() => setImgError(false)} style={{ marginTop: 8, fontSize: 13 }}>
-                Réessayer
-              </button>
+              <p>⚠️ Génération échouée</p>
+              <button onClick={() => { setImgError(false); setImgLoaded(false); }} style={{ marginTop: 8, fontSize: 13 }}>Réessayer</button>
             </div>
           ) : (
-            <img
-              src={showOriginal ? originalPhoto : generatedImageUrl}
-              className={s.mainImage}
-              alt="résultat"
-              onError={() => setImgError(true)}
-              onLoad={() => setImgError(false)}
-            />
+            <>
+              {!imgLoaded && !showOriginal && (
+                <div className={s.imgErrorBox}><p>🎨 Génération en cours…</p></div>
+              )}
+              <img
+                src={showOriginal ? originalPhoto : generatedImageUrl}
+                className={s.mainImage}
+                alt="résultat"
+                style={{ display: (imgLoaded || showOriginal) ? "block" : "none" }}
+                onLoad={() => { setImgLoaded(true); setImgError(false); }}
+                onError={() => setImgError(true)}
+              />
+            </>
           )}
           <div className={s.toggleRow}>
             <button
