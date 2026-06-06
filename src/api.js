@@ -1,8 +1,5 @@
-import { HfInference } from "@huggingface/inference";
-
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const HF_TOKEN = import.meta.env.VITE_HF_TOKEN;
 
 async function groqFetch(model, messages, options = {}) {
   const res = await fetch(GROQ_API_URL, {
@@ -21,19 +18,11 @@ async function groqFetch(model, messages, options = {}) {
   return data.choices[0].message.content.trim();
 }
 
-function base64ToBlob(base64, mimeType) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mimeType || "image/jpeg" });
-}
-
 export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userRequest }) {
   if (!GROQ_KEY) throw new Error("Clé Groq manquante. Vérifie les secrets GitHub.");
 
   const mediaType = imageMediaType || "image/jpeg";
 
-  // Étape 1 : description visuelle + prompt SD de secours
   const visionText = await groqFetch(
     "meta-llama/llama-4-scout-17b-16e-instruct",
     [{
@@ -53,7 +42,6 @@ export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userR
   const analysis = descMatch ? descMatch[1].trim() : `${roomType} analysé.`;
   const stylePrompt = promptMatch ? promptMatch[1].trim() : `${roomType} with ${userRequest}`;
 
-  // Étape 2 : liste d'achats JSON
   const jsonText = await groqFetch(
     "llama-3.3-70b-versatile",
     [
@@ -81,29 +69,9 @@ export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userR
   return { analysis, stylePrompt, items };
 }
 
-export async function generateImage({ imageBase64, imageMediaType, userRequest, stylePrompt }) {
-  // Priorité : HuggingFace img2img (modifie la vraie photo)
-  if (HF_TOKEN) {
-    try {
-      const hf = new HfInference(HF_TOKEN);
-      const blob = base64ToBlob(imageBase64, imageMediaType);
-      const result = await hf.imageToImage({
-        model: "timbrooks/instruct-pix2pix",
-        inputs: blob,
-        parameters: {
-          prompt: userRequest,
-          num_inference_steps: 20,
-          image_guidance_scale: 1.5,
-          guidance_scale: 7.5,
-        },
-      });
-      return URL.createObjectURL(result);
-    } catch (e) {
-      console.warn("HF img2img échoué, fallback Pollinations :", e.message);
-    }
-  }
-
-  // Fallback : Pollinations text-to-image
+export function generateImageUrl({ stylePrompt, seed }) {
   const prompt = `${stylePrompt}, interior design professional photography, beautiful lighting, high quality, realistic, no people, no text`;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=512&nologo=true&nofeed=true&seed=${Date.now()}`;
+  // On tronque à 400 chars max pour éviter les URLs trop longues
+  const safePrompt = prompt.slice(0, 400);
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=768&height=512&nologo=true&seed=${seed || Date.now()}`;
 }

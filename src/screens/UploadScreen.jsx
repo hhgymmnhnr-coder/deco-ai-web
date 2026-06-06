@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { ROOM_TYPES } from "../config";
-import { analyzeRoom, generateImage } from "../api";
+import { analyzeRoom } from "../api";
 import s from "./UploadScreen.module.css";
 
 export default function UploadScreen({ onBack, onResult }) {
@@ -40,17 +40,9 @@ export default function UploadScreen({ onBack, onResult }) {
         userRequest: userRequest.trim(),
       });
 
-      setLoadingStep("🎨 Modification de ta photo (30–60 sec)...");
-      const imageUrl = await generateImage({
-        imageBase64: photo.base64,
-        imageMediaType: photo.mimeType,
-        userRequest: userRequest.trim(),
-        stylePrompt: analyzeData.stylePrompt,
-      });
-
       onResult({
         originalPhoto: photo.uri,
-        generatedImageUrl: imageUrl,
+        stylePrompt: analyzeData.stylePrompt,
         analysis: analyzeData.analysis,
         items: analyzeData.items || [],
         roomType: selectedRoom,

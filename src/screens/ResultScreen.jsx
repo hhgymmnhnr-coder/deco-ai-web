@@ -1,12 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CATEGORY_ICONS } from "../config";
+import { generateImageUrl } from "../api";
 import s from "./ResultScreen.module.css";
 
 export default function ResultScreen({ data, onBack, onHome }) {
-  const { originalPhoto, generatedImageUrl, analysis, items = [], roomType, userRequest } = data;
+  const { originalPhoto, stylePrompt, analysis, items = [], roomType, userRequest } = data;
+
   const [showOriginal, setShowOriginal] = useState(false);
-  const [imgError, setImgError] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgState, setImgState] = useState("loading"); // "loading" | "ready" | "error"
+  const [seed, setSeed] = useState(() => Date.now());
+  const generatedUrl = generateImageUrl({ stylePrompt, seed });
+
+  // Précharge l'image générée via un objet Image JS (pas de display:none tricks)
+  useEffect(() => {
+    setImgState("loading");
+    const img = new window.Image();
+    img.onload = () => setImgState("ready");
+    img.onerror = () => setImgState("error");
+    img.src = generatedUrl;
+    return () => { img.onload = null; img.onerror = null; };
+  }, [generatedUrl]);
+
+  const handleRetry = () => setSeed(Date.now());
 
   const totalMin = items.reduce((a, i) => a + (i.budgetMin || 0), 0);
   const totalMax = items.reduce((a, i) => a + (i.budgetMax || 0), 0);
@@ -24,29 +39,25 @@ export default function ResultScreen({ data, onBack, onHome }) {
           <span>{roomType} · {userRequest}</span>
         </div>
 
-        {/* Image avant/après */}
         <p className={s.sectionLabel}>Transformation</p>
         <div className={s.imageCard}>
-          {imgError && !showOriginal ? (
-            <div className={s.imgErrorBox}>
+          {showOriginal ? (
+            <img src={originalPhoto} className={s.mainImage} alt="avant" />
+          ) : imgState === "loading" ? (
+            <div className={s.imgLoader}>
+              <span className={s.loaderSpinner} />
+              <p>Génération en cours…</p>
+              <p className={s.loaderSub}>peut prendre jusqu'à 60 sec</p>
+            </div>
+          ) : imgState === "error" ? (
+            <div className={s.imgLoader}>
               <p>⚠️ Génération échouée</p>
-              <button onClick={() => { setImgError(false); setImgLoaded(false); }} style={{ marginTop: 8, fontSize: 13 }}>Réessayer</button>
+              <button className={s.retryBtn} onClick={handleRetry}>Réessayer</button>
             </div>
           ) : (
-            <>
-              {!imgLoaded && !showOriginal && (
-                <div className={s.imgErrorBox}><p>🎨 Génération en cours…</p></div>
-              )}
-              <img
-                src={showOriginal ? originalPhoto : generatedImageUrl}
-                className={s.mainImage}
-                alt="résultat"
-                style={{ display: (imgLoaded || showOriginal) ? "block" : "none" }}
-                onLoad={() => { setImgLoaded(true); setImgError(false); }}
-                onError={() => setImgError(true)}
-              />
-            </>
+            <img src={generatedUrl} className={s.mainImage} alt="après" />
           )}
+
           <div className={s.toggleRow}>
             <button
               className={`${s.toggleBtn} ${!showOriginal ? s.toggleBtnActive : ""}`}
@@ -59,7 +70,6 @@ export default function ResultScreen({ data, onBack, onHome }) {
           </div>
         </div>
 
-        {/* Analyse */}
         {analysis && (
           <div className={s.analysisCard}>
             <p className={s.analysisLabel}>Analyse de ta pièce</p>
@@ -67,7 +77,6 @@ export default function ResultScreen({ data, onBack, onHome }) {
           </div>
         )}
 
-        {/* Budget */}
         <div className={s.budgetCard}>
           <div>
             <p className={s.budgetLabel}>Budget estimé</p>
@@ -76,7 +85,6 @@ export default function ResultScreen({ data, onBack, onHome }) {
           <p className={s.budgetAmount}>{totalMin}€ – {totalMax}€</p>
         </div>
 
-        {/* Liste */}
         <p className={s.sectionLabel}>Liste d'achats ({items.length} articles)</p>
         {items.map((item, i) => <ItemCard key={i} item={item} />)}
 
