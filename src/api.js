@@ -55,7 +55,20 @@ async function hfGenerate(modelUrl, prompt) {
   }
 
   const blob = await res.blob();
-  return URL.createObjectURL(blob);
+
+  // Vérifier que le blob est vraiment une image affichable
+  const blobUrl = URL.createObjectURL(blob);
+  await new Promise((resolve, reject) => {
+    const testImg = new Image();
+    testImg.onload = resolve;
+    testImg.onerror = () => {
+      URL.revokeObjectURL(blobUrl);
+      reject(new Error(`Blob invalide (${blob.size} bytes, type: ${blob.type})`));
+    };
+    testImg.src = blobUrl;
+  });
+
+  return blobUrl;
 }
 
 export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userRequest }) {
@@ -126,5 +139,5 @@ export async function generateImage({ imagePrompt }) {
     }
   }
 
-  throw new Error(`Génération impossible: ${lastError?.message || "tous les modèles ont échoué"}`);
+  throw new Error(`Génération impossible — ${lastError?.message || "tous les modèles ont échoué"}. Réessaie dans 30 secondes.`);
 }
