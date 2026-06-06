@@ -1,7 +1,12 @@
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const HF_TOKEN = import.meta.env.VITE_HF_TOKEN;
-const HF_MODEL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
+
+// Modèles HF à essayer dans l'ordre
+const HF_MODELS = [
+  "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1",
+  "https://api-inference.huggingface.co/models/CompVis/stable-diffusion-v1-4",
+];
 
 async function groqFetch(model, messages, options = {}) {
   const res = await fetch(GROQ_API_URL, {
@@ -16,9 +21,9 @@ async function groqFetch(model, messages, options = {}) {
   return (await res.json()).choices[0].message.content.trim();
 }
 
-async function hfTextToImage(prompt) {
-  const makeReq = () =>
-    fetch(HF_MODEL, {
+async function hfGenerate(modelUrl, prompt) {
+  const call = () =>
+    fetch(modelUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${HF_TOKEN}`,
@@ -28,20 +33,26 @@ async function hfTextToImage(prompt) {
       body: JSON.stringify({ inputs: prompt }),
     });
 
-  let res = await makeReq();
+  let res = await call();
 
-  // Modèle en cours de chargement → attendre et réessayer
+  // Modèle en cours de démarrage → attendre et réessayer
   if (res.status === 503) {
     const json = await res.json().catch(() => ({}));
-    const wait = Math.min((json.estimated_time || 20) * 1000, 30000);
+    const wait = Math.min((json.estimated_time || 25) * 1000, 45000);
     await new Promise((r) => setTimeout(r, wait));
-    res = await makeReq();
+    res = await call();
   }
 
-  if (!res.ok) throw new Error(`HF error ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error || `HF ${res.status}`);
+  }
 
-  const contentType = res.headers.get("content-type") || "";
-  if (!contentType.startsWith("image/")) throw new Error("HF n'a pas retourné une image");
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.startsWith("image/")) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Pas une image: ${ct} — ${text.slice(0, 100)}`);
+  }
 
   const blob = await res.blob();
   return URL.createObjectURL(blob);
@@ -60,7 +71,7 @@ export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userR
         { type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } },
         {
           type: "text",
-          text: `Describe this ${roomType} briefly. Then write a Stable Diffusion image prompt (max 200 words) showing this ${roomType} with: "${userRequest}". Be very specific about colors, furniture, lighting. Format:\nDESCRIPTION: ...\nPROMPT: ...`,
+          text: `Describe this ${roomType} briefly. Then write a Stable Diffusion image generation prompt (max 150 words) for this ${roomType} including: "${userRequest}". Format:\nDESCRIPTION: ...\nPROMPT: ...`,
         },
       ],
     }]
@@ -71,48 +82,49 @@ export async function analyzeRoom({ imageBase64, imageMediaType, roomType, userR
   const analysis = descMatch ? descMatch[1].trim() : `${roomType} analysé.`;
   const imagePrompt = promptMatch
     ? promptMatch[1].trim()
-    : `${roomType} with ${userRequest}, interior design, professional photography`;
+    : `${roomType} interior with ${userRequest}, professional photography`;
 
   const jsonText = await groqFetch(
     "llama-3.3-70b-versatile",
     [
-      { role: "system", content: "You are an interior design expert. Always respond with valid JSON only, no markdown." },
+      { role: "system", content: "Interior design expert. Valid JSON only, no markdown." },
       {
         role: "user",
-        content: `A client has a ${roomType} and wants: "${userRequest}". Generate 6 relevant items to buy. Return JSON only: {"items":[{"category":"one of: Canapé,Table,Lampe,Tapis,Coussin,Plante,Étagère,Miroir,Tableau,Rideau","name":"French product name","description":"why it fits (French, 1 sentence)","budgetMin":50,"budgetMax":300,"searchKeywords":"2-3 French keywords"}]}`,
+        content: `Client has a ${roomType} and wants: "${userRequest}". Generate 6 items to buy. JSON: {"items":[{"category":"Canapé|Table|Lampe|Tapis|Coussin|Plante|Étagère|Miroir|Tableau|Rideau","name":"French name","description":"French 1 sentence","budgetMin":50,"budgetMax":300,"searchKeywords":"2-3 French keywords"}]}`,
       },
     ],
     { response_format: { type: "json_object" } }
   );
 
   const parsed = JSON.parse(jsonText);
-  const SHOP_LINKS = (kw) => ({
+  const LINKS = (kw) => ({
     ikea: `https://www.ikea.com/fr/fr/search/?q=${encodeURIComponent(kw)}`,
     amazon: `https://www.amazon.fr/s?k=${encodeURIComponent(kw)}`,
     maisonsduMonde: `https://www.maisonsdumonde.com/FR/fr/search?q=${encodeURIComponent(kw)}`,
     googleShopping: `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(kw)}`,
   });
-  const items = (parsed.items || []).map((item) => ({
-    ...item,
-    links: SHOP_LINKS(item.searchKeywords || item.name),
-  }));
+  const items = (parsed.items || []).map((i) => ({ ...i, links: LINKS(i.searchKeywords || i.name) }));
 
   return { analysis, imagePrompt, items };
 }
 
 export async function generateImage({ imagePrompt }) {
-  const prompt = `${imagePrompt}, interior design professional photography, beautiful lighting, high quality, 8k, realistic, no people, no text`;
+  const prompt = `${imagePrompt}, interior design professional photography, beautiful lighting, high quality, realistic, 8k, no people, no text`.slice(0, 500);
 
-  // 1. HuggingFace (token requis, retourne une vraie image)
-  if (HF_TOKEN) {
+  if (!HF_TOKEN) {
+    throw new Error("Token HuggingFace manquant. Vérifie le secret VITE_HF_TOKEN dans GitHub.");
+  }
+
+  let lastError;
+  for (const modelUrl of HF_MODELS) {
     try {
-      return await hfTextToImage(prompt.slice(0, 500));
+      const blobUrl = await hfGenerate(modelUrl, prompt);
+      return blobUrl;
     } catch (e) {
-      console.warn("HF échoué, fallback Pollinations:", e.message);
+      lastError = e;
+      console.warn(`Modèle ${modelUrl} échoué:`, e.message);
     }
   }
 
-  // 2. Pollinations (gratuit, 1 req/IP à la fois)
-  const safePrompt = prompt.slice(0, 400);
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=768&height=512&nologo=true&seed=${Date.now()}`;
+  throw new Error(`Génération impossible: ${lastError?.message || "tous les modèles ont échoué"}`);
 }
