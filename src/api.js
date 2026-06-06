@@ -82,7 +82,11 @@ export async function generateImage({ stylePrompt }) {
 
   if (!blob || blob.size === 0) throw new Error("Image vide retournée");
 
+  // Conversion blob → base64 compatible navigateur
   const arrayBuffer = await blob.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  const base64 = btoa(binary);
   return `data:image/jpeg;base64,${base64}`;
 }
