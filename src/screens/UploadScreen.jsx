@@ -1,12 +1,12 @@
 import { useState, useRef } from "react";
-import { STYLES, ROOM_TYPES } from "../config";
+import { ROOM_TYPES } from "../config";
 import { analyzeRoom, generateImage } from "../api";
 import s from "./UploadScreen.module.css";
 
 export default function UploadScreen({ onBack, onResult }) {
-  const [photo, setPhoto] = useState(null); // { uri, base64, mimeType }
-  const [selectedStyle, setSelectedStyle] = useState(null);
+  const [photo, setPhoto] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [userRequest, setUserRequest] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState("");
   const [error, setError] = useState("");
@@ -24,7 +24,7 @@ export default function UploadScreen({ onBack, onResult }) {
     reader.readAsDataURL(file);
   };
 
-  const canSubmit = photo && selectedStyle && selectedRoom;
+  const canSubmit = photo && selectedRoom && userRequest.trim().length > 3;
 
   const handleGenerate = async () => {
     if (!canSubmit || loading) return;
@@ -36,11 +36,11 @@ export default function UploadScreen({ onBack, onResult }) {
       const analyzeData = await analyzeRoom({
         imageBase64: photo.base64,
         imageMediaType: photo.mimeType || "image/jpeg",
-        style: selectedStyle,
         roomType: selectedRoom,
+        userRequest: userRequest.trim(),
       });
 
-      setLoadingStep("🎨 Génération de l'image (30–60 sec)...");
+      setLoadingStep("🎨 Génération de l'image...");
       const imageUrl = await generateImage({ stylePrompt: analyzeData.stylePrompt });
 
       onResult({
@@ -48,8 +48,8 @@ export default function UploadScreen({ onBack, onResult }) {
         generatedImageUrl: imageUrl,
         analysis: analyzeData.analysis,
         items: analyzeData.items || [],
-        style: selectedStyle,
         roomType: selectedRoom,
+        userRequest: userRequest.trim(),
       });
     } catch (err) {
       setError(err.message);
@@ -67,21 +67,13 @@ export default function UploadScreen({ onBack, onResult }) {
       </div>
 
       <div className={s.scroll}>
-        {/* Photo */}
+        {/* Étape 1 : Photo */}
         <SectionTitle n="1" title="Photo de ta pièce" />
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: "none" }}
-          onChange={handleFileChange}
-        />
+        <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
         {photo ? (
           <div className={s.photoPreviewWrap}>
             <img src={photo.uri} className={s.photoPreview} alt="pièce" />
-            <button className={s.changePhoto} onClick={() => setPhoto(null)}>
-              Changer la photo
-            </button>
+            <button className={s.changePhoto} onClick={() => setPhoto(null)}>Changer la photo</button>
           </div>
         ) : (
           <div className={s.photoActions}>
@@ -92,7 +84,7 @@ export default function UploadScreen({ onBack, onResult }) {
           </div>
         )}
 
-        {/* Type de pièce */}
+        {/* Étape 2 : Type de pièce */}
         <SectionTitle n="2" title="Type de pièce" />
         <div className={s.chips}>
           {ROOM_TYPES.map((r) => (
@@ -106,24 +98,15 @@ export default function UploadScreen({ onBack, onResult }) {
           ))}
         </div>
 
-        {/* Style */}
-        <SectionTitle n="3" title="Style de décoration" />
-        <div className={s.stylesGrid}>
-          {STYLES.map((st) => (
-            <button
-              key={st.id}
-              className={`${s.styleCard} ${selectedStyle === st.id ? s.styleCardSelected : ""}`}
-              onClick={() => setSelectedStyle(st.id)}
-            >
-              <span className={s.styleIcon}>{st.icon}</span>
-              <span className={`${s.styleLabel} ${selectedStyle === st.id ? s.styleLabelSelected : ""}`}>
-                {st.label}
-              </span>
-              <span className={s.styleDesc}>{st.description}</span>
-              {selectedStyle === st.id && <span className={s.check}>✓</span>}
-            </button>
-          ))}
-        </div>
+        {/* Étape 3 : Demande */}
+        <SectionTitle n="3" title="Qu'est-ce que tu veux ajouter ?" />
+        <textarea
+          className={s.requestInput}
+          placeholder="Ex : un canapé rouge moderne, des plantes, une lampe dorée au coin..."
+          value={userRequest}
+          onChange={(e) => setUserRequest(e.target.value)}
+          rows={4}
+        />
 
         {error && <div className={s.error}>{error}</div>}
 
@@ -132,18 +115,10 @@ export default function UploadScreen({ onBack, onResult }) {
           onClick={handleGenerate}
           disabled={!canSubmit || loading}
         >
-          {loading ? (
-            <span>{loadingStep}</span>
-          ) : canSubmit ? (
-            "✨  Générer la transformation"
-          ) : (
-            "Complète les 3 étapes ci-dessus"
-          )}
+          {loading ? loadingStep : canSubmit ? "✨  Générer la transformation" : "Complète les 3 étapes ci-dessus"}
         </button>
 
-        {loading && (
-          <p className={s.loadingHint}>La génération peut prendre 30 à 60 secondes…</p>
-        )}
+        {loading && <p className={s.loadingHint}>La génération peut prendre 30 à 60 secondes…</p>}
       </div>
     </div>
   );

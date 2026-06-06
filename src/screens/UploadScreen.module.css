@@ -73,6 +73,22 @@
 .chip:hover { border-color: var(--primary); color: var(--primary); }
 .chipSelected { background: rgba(200,169,126,0.15); border-color: var(--primary); color: var(--primary); font-weight: 600; }
 
+.requestInput {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.requestInput:focus { outline: none; border-color: var(--primary); }
+.requestInput::placeholder { color: var(--text3); }
+
 .stylesGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .styleCard {
