@@ -5,6 +5,7 @@ import s from "./ResultScreen.module.css";
 export default function ResultScreen({ data, onBack, onHome }) {
   const { originalPhoto, generatedImageUrl, analysis, items = [], style, roomType } = data;
   const [showOriginal, setShowOriginal] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const styleInfo = STYLES.find((st) => st.id === style);
 
   const totalMin = items.reduce((a, i) => a + (i.budgetMin || 0), 0);
@@ -26,11 +27,22 @@ export default function ResultScreen({ data, onBack, onHome }) {
         {/* Image avant/après */}
         <p className={s.sectionLabel}>Transformation</p>
         <div className={s.imageCard}>
-          <img
-            src={showOriginal ? originalPhoto : generatedImageUrl}
-            className={s.mainImage}
-            alt="résultat"
-          />
+          {imgError && !showOriginal ? (
+            <div className={s.imgErrorBox}>
+              <p>⚠️ Image non disponible</p>
+              <button onClick={() => setImgError(false)} style={{ marginTop: 8, fontSize: 13 }}>
+                Réessayer
+              </button>
+            </div>
+          ) : (
+            <img
+              src={showOriginal ? originalPhoto : generatedImageUrl}
+              className={s.mainImage}
+              alt="résultat"
+              onError={() => setImgError(true)}
+              onLoad={() => setImgError(false)}
+            />
+          )}
           <div className={s.toggleRow}>
             <button
               className={`${s.toggleBtn} ${!showOriginal ? s.toggleBtnActive : ""}`}
